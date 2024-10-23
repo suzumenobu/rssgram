@@ -102,27 +102,30 @@ async fn main() -> anyhow::Result<()> {
 
     let db = NanoDB::open("db.json")?;
     let mut repository = NanoDbTelegramChannelRepository::new(db);
-    let mut dialogs = client.iter_dialogs();
 
+    update_rss_feeds(&client, &mut repository, &config.base_rss_feed_path).await?;
+
+    repository.save().await?;
+
+    Ok(())
+}
+
+async fn update_rss_feeds(
+    client: &Client,
+    repository: &mut impl TelegramChannelRepository,
+    base_rss_feed_path: &Path,
+) -> anyhow::Result<()> {
+    let mut dialogs = client.iter_dialogs();
     while let Some(dialog) = dialogs.next().await? {
         let chat = dialog.chat();
 
         match chat {
             grammers_client::types::Chat::Channel(channel) => {
-                process_channel(
-                    &client,
-                    &mut repository,
-                    channel,
-                    &config.base_rss_feed_path,
-                )
-                .await?;
+                process_channel(&client, repository, channel, &base_rss_feed_path).await?;
             }
             _ => continue,
         }
     }
-
-    repository.save().await?;
-
     Ok(())
 }
 
@@ -172,7 +175,11 @@ async fn process_channel(
                 let item = rss::ItemBuilder::default()
                     .title(message.id().to_string())
                     .description(message.text().to_string())
-                    .link(format!("https://t.me/{}/{}", channel.username().unwrap(), message.id()))
+                    .link(format!(
+                        "https://t.me/{}/{}",
+                        channel.username().unwrap(),
+                        message.id()
+                    ))
                     .build();
                 items.push(item);
             }
