@@ -172,7 +172,7 @@ async fn process_channel(
                 let item = rss::ItemBuilder::default()
                     .title(message.id().to_string())
                     .description(message.text().to_string())
-                    .link(message.id().to_string())
+                    .link(format!("https://t.me/{}/{}", channel.username().unwrap(), message.id()))
                     .build();
                 items.push(item);
             }
