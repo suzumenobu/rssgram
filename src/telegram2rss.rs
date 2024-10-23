@@ -84,7 +84,7 @@ async fn process_channel(
             rss_channel.set_items(items);
 
             let file = File::create(rss_feed_path)?;
-            rss_channel.write_to(file)?;
+            rss_channel.pretty_write_to(file, b' ', 2)?;
             channel_info.last_processed_message_id = id;
             repository
                 .update_channel_info(&channel.id(), &channel_info)
