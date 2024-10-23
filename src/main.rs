@@ -1,12 +1,12 @@
 mod config;
+mod telegram;
+
 use envconfig::Envconfig;
-use grammers_client::{Client, Config};
-use grammers_session::Session;
+use grammers_client::Client;
 use nanodb::nanodb::NanoDB;
 use rss::{Channel, ChannelBuilder};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io;
 use std::io::BufReader;
 use std::path::Path;
 
@@ -78,27 +78,7 @@ async fn main() -> anyhow::Result<()> {
 
     std::fs::create_dir_all(&config.base_rss_feed_path)?;
 
-    let client = Client::connect(Config {
-        session: Session::load_file_or_create(&config.telegram_session_file_path)?,
-        api_id: config.telegram_api_id,
-        api_hash: config.telegram_api_hash,
-        params: Default::default(),
-    })
-    .await?;
-
-    if !(client.is_authorized().await?) {
-        let token = client
-            .request_login_code(&config.telegram_account_phone)
-            .await?;
-        let mut code = String::new();
-        io::stdin()
-            .read_line(&mut code)
-            .expect("Failed to read line");
-        client.sign_in(&token, &code).await?;
-    }
-    client
-        .session()
-        .save_to_file(&config.telegram_session_file_path)?;
+    let client = telegram::init_client(&config).await?;
 
     let db = NanoDB::open("db.json")?;
     let mut repository = NanoDbTelegramChannelRepository::new(db);
