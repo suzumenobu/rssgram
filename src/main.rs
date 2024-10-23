@@ -1,6 +1,6 @@
 mod config;
-mod telegram;
 mod repository;
+mod telegram;
 
 use envconfig::Envconfig;
 use grammers_client::Client;
