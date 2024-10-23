@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use envconfig::Envconfig;
 
-#[derive(Envconfig)]
+#[derive(Envconfig, Clone)]
 pub struct Config {
     pub telegram_api_id: i32,
     pub telegram_api_hash: String,

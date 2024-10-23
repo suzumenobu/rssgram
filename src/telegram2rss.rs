@@ -1,34 +1,23 @@
-use std::{fs::File, io::BufReader, path::Path, time::Duration};
+use std::{fs::File, io::BufReader, path::Path};
 
 use grammers_client::Client;
 use rss::{Channel, ChannelBuilder};
 
-use crate::{repository, domain::ChannelInfo};
+use crate::{domain::ChannelInfo, repository};
 
-pub async fn watch_updates(
-    client: &Client,
-    repository: &mut impl repository::TelegramChannelRepository,
-    base_rss_feed_path: &Path,
-    update_interval: Duration,
-) -> anyhow::Result<()> {
-    loop {
-        update_rss_feeds_once(client, repository, base_rss_feed_path).await?;
-        tokio::time::sleep(update_interval).await;
-    }
-}
-
-async fn update_rss_feeds_once(
+pub async fn update_rss_feeds(
     client: &Client,
     repository: &mut impl repository::TelegramChannelRepository,
     base_rss_feed_path: &Path,
 ) -> anyhow::Result<()> {
+    log::info!("Starting RSS feeds update");
     let mut dialogs = client.iter_dialogs();
     while let Some(dialog) = dialogs.next().await? {
         let chat = dialog.chat();
 
         match chat {
             grammers_client::types::Chat::Channel(channel) => {
-                process_channel(&client, repository, channel, &base_rss_feed_path).await?;
+                process_channel(client, repository, channel, base_rss_feed_path).await?;
             }
             _ => continue,
         }

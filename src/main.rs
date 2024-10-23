@@ -1,14 +1,22 @@
+mod actor;
+mod app_state;
 mod config;
+mod domain;
 mod repository;
 mod telegram;
 mod telegram2rss;
-mod domain;
 
+use actor::AppActor;
+use app_state::AppState;
+use axum::Router;
 use envconfig::Envconfig;
 use nanodb::nanodb::NanoDB;
+use tokio::sync::mpsc;
+use tower_http::services::ServeDir;
 
 use std::time::Duration;
 
+use crate::actor::AppActorMessage;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,16 +29,40 @@ async fn main() -> anyhow::Result<()> {
     let client = telegram::init_client(&config).await?;
 
     let db = NanoDB::open("db.json")?;
-    let mut repository = repository::NanoDbTelegramChannelRepository::new(db);
+    let repository = repository::NanoDbTelegramChannelRepository::new(db);
 
-    telegram2rss::watch_updates(
-        &client,
-        &mut repository,
-        &config.base_rss_feed_path,
-        Duration::from_secs(config.rss_feeds_update_interval_secs),
-    )
-    .await?;
+    let state = AppState {
+        repository,
+        client,
+        config: config.clone(),
+    };
+
+    let (tx, rx) = mpsc::channel(100);
+    let app_actor = AppActor::new(state, rx);
+
+    let update_rss_feeds_tx = tx.clone();
+    let update_interval = Duration::from_secs(config.rss_feeds_update_interval_secs);
+    tokio::spawn(async move {
+        loop {
+            log::info!("Sending RSS update msg");
+            if let Err(err) = update_rss_feeds_tx
+                .send(AppActorMessage::SyncRssFeeds)
+                .await
+            {
+                log::error!("Failed to send update RSS feed with {}", err);
+            }
+
+            tokio::time::sleep(update_interval).await;
+        }
+    });
+
+    tokio::spawn(async move { actor::run(app_actor).await });
+
+    let rss_feeds_service = ServeDir::new(&config.base_rss_feed_path);
+    let app = Router::new().route_service("/xml", rss_feeds_service);
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 
     Ok(())
 }
-

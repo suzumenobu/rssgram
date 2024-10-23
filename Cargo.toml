@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.90"
+axum = "0.7.7"
 dotenv = "0.15.0"
 env_logger = "0.11.5"
 envconfig = "0.11.0"
@@ -15,3 +16,4 @@ nanodb = "0.4.5"
 rss = "2.0.9"
 serde = { version = "1.0.213", features = ["derive"] }
 tokio = { version = "1.41.0", features = ["full"] }
+tower-http = { version = "0.6.1", features = ["fs"] }
