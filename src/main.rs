@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
         &client,
         &mut repository,
         &config.base_rss_feed_path,
-        Duration::from_secs(30),
+        Duration::from_secs(config.rss_feeds_update_interval_secs),
     )
     .await?;
 
