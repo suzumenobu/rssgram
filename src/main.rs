@@ -30,9 +30,7 @@ async fn main() -> anyhow::Result<()> {
     let db = NanoDB::open("db.json")?;
     let mut repository = repository::NanoDbTelegramChannelRepository::new(db);
 
-    update_rss_feeds(&client, &mut repository, &config.base_rss_feed_path).await?;
-
-    repository.save().await?;
+    update_rss_feeds_once(&client, &mut repository, &config.base_rss_feed_path).await?;
 
     Ok(())
 }

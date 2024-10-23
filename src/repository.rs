@@ -23,11 +23,6 @@ impl NanoDbTelegramChannelRepository {
     pub fn new(db: NanoDB) -> Self {
         Self { db }
     }
-
-    pub async fn save(&mut self) -> anyhow::Result<()> {
-        self.db.write().await?;
-        Ok(())
-    }
 }
 
 impl TelegramChannelRepository for NanoDbTelegramChannelRepository {
@@ -52,6 +47,7 @@ impl TelegramChannelRepository for NanoDbTelegramChannelRepository {
     ) -> anyhow::Result<()> {
         let key = channel_id.to_string();
         self.db.insert(&key, channel_info).await?;
+        self.db.write().await?;
         Ok(())
     }
 }
