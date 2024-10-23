@@ -2,17 +2,13 @@ mod config;
 mod repository;
 mod telegram;
 mod telegram2rss;
+mod domain;
 
 use envconfig::Envconfig;
 use nanodb::nanodb::NanoDB;
-use serde::{Deserialize, Serialize};
+
 use std::time::Duration;
 
-#[derive(Deserialize, Serialize, Debug, Default)]
-pub struct ChannelInfo {
-    pub last_processed_message_id: i32,
-    pub rss_feed_file_name: String,
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

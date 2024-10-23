@@ -3,7 +3,7 @@ use std::{fs::File, io::BufReader, path::Path, time::Duration};
 use grammers_client::Client;
 use rss::{Channel, ChannelBuilder};
 
-use crate::{repository, ChannelInfo};
+use crate::{repository, domain::ChannelInfo};
 
 pub async fn watch_updates(
     client: &Client,

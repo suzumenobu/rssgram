@@ -1,6 +1,6 @@
 use nanodb::nanodb::NanoDB;
 
-use crate::ChannelInfo;
+use crate::domain::ChannelInfo;
 
 pub trait TelegramChannelRepository {
     fn find_channel_info_by_id(
