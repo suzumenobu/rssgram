@@ -1,5 +1,6 @@
 mod config;
 mod telegram;
+mod repository;
 
 use envconfig::Envconfig;
 use grammers_client::Client;
@@ -16,60 +17,6 @@ pub struct ChannelInfo {
     pub rss_feed_file_name: String,
 }
 
-pub trait TelegramChannelRepository {
-    fn find_channel_info_by_id(
-        &self,
-        channel_id: &i64,
-    ) -> impl std::future::Future<Output = anyhow::Result<Option<ChannelInfo>>> + Send;
-
-    fn update_channel_info(
-        &mut self,
-        channel_id: &i64,
-        channel_info: &ChannelInfo,
-    ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
-}
-
-struct NanoDbTelegramChannelRepository {
-    db: NanoDB,
-}
-
-impl NanoDbTelegramChannelRepository {
-    pub fn new(db: NanoDB) -> Self {
-        Self { db }
-    }
-
-    pub async fn save(&mut self) -> anyhow::Result<()> {
-        self.db.write().await?;
-        Ok(())
-    }
-}
-
-impl TelegramChannelRepository for NanoDbTelegramChannelRepository {
-    async fn find_channel_info_by_id(
-        &self,
-        channel_id: &i64,
-    ) -> anyhow::Result<Option<ChannelInfo>> {
-        let key = channel_id.to_string();
-        match self.db.data().await.get(&key) {
-            Ok(value) => Ok(Some(value.into()?)),
-            Err(err) => match err {
-                nanodb::error::NanoDBError::KeyNotFound(_) => Ok(None),
-                any_other_error => Err(any_other_error.into()),
-            },
-        }
-    }
-
-    async fn update_channel_info(
-        &mut self,
-        channel_id: &i64,
-        channel_info: &ChannelInfo,
-    ) -> anyhow::Result<()> {
-        let key = channel_id.to_string();
-        self.db.insert(&key, channel_info).await?;
-        Ok(())
-    }
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
@@ -81,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
     let client = telegram::init_client(&config).await?;
 
     let db = NanoDB::open("db.json")?;
-    let mut repository = NanoDbTelegramChannelRepository::new(db);
+    let mut repository = repository::NanoDbTelegramChannelRepository::new(db);
 
     update_rss_feeds(&client, &mut repository, &config.base_rss_feed_path).await?;
 
@@ -92,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn update_rss_feeds(
     client: &Client,
-    repository: &mut impl TelegramChannelRepository,
+    repository: &mut impl repository::TelegramChannelRepository,
     base_rss_feed_path: &Path,
 ) -> anyhow::Result<()> {
     let mut dialogs = client.iter_dialogs();
@@ -111,7 +58,7 @@ async fn update_rss_feeds(
 
 async fn process_channel(
     client: &Client,
-    repository: &mut impl TelegramChannelRepository,
+    repository: &mut impl repository::TelegramChannelRepository,
     channel: &grammers_client::types::chat::Channel,
     base_rss_feed_path: &Path,
 ) -> anyhow::Result<()> {
