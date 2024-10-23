@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::time::Duration;
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct ChannelInfo {
@@ -30,12 +31,30 @@ async fn main() -> anyhow::Result<()> {
     let db = NanoDB::open("db.json")?;
     let mut repository = repository::NanoDbTelegramChannelRepository::new(db);
 
-    update_rss_feeds_once(&client, &mut repository, &config.base_rss_feed_path).await?;
+    watch_telegram_channel_updates(
+        &client,
+        &mut repository,
+        &config.base_rss_feed_path,
+        Duration::from_secs(30),
+    )
+    .await?;
 
     Ok(())
 }
 
-async fn update_rss_feeds(
+async fn watch_telegram_channel_updates(
+    client: &Client,
+    repository: &mut impl repository::TelegramChannelRepository,
+    base_rss_feed_path: &Path,
+    update_interval: Duration,
+) -> anyhow::Result<()> {
+    loop {
+        update_rss_feeds_once(client, repository, base_rss_feed_path).await?;
+        tokio::time::sleep(update_interval).await;
+    }
+}
+
+async fn update_rss_feeds_once(
     client: &Client,
     repository: &mut impl repository::TelegramChannelRepository,
     base_rss_feed_path: &Path,
