@@ -13,8 +13,8 @@ use axum::{
     http::{header, HeaderValue},
     middleware::{self, Next},
     response::IntoResponse,
-    routing::post,
-    Router,
+    routing::{get, post},
+    Json, Router,
 };
 use envconfig::Envconfig;
 use nanodb::nanodb::NanoDB;
@@ -28,6 +28,11 @@ use crate::actor::AppActorMessage;
 #[derive(Clone)]
 struct ActorSenderState {
     tx: mpsc::Sender<AppActorMessage>,
+}
+
+#[derive(Clone)]
+struct AppConfigState {
+    config: config::Config,
 }
 
 #[tokio::main]
@@ -47,6 +52,9 @@ async fn main() -> anyhow::Result<()> {
     let db = NanoDB::open("db.json")?;
     let repository = repository::NanoDbTelegramChannelRepository::new(db);
 
+    let app_config_state = AppConfigState {
+        config: config.clone(),
+    };
     let state = AppState {
         repository,
         client,
@@ -77,18 +85,23 @@ async fn main() -> anyhow::Result<()> {
     let app_actor_sender_state = ActorSenderState { tx: tx.clone() };
 
     let rss_feeds_service = ServeDir::new(&config.base_rss_feed_path);
+    let rss_api = Router::new()
+        .route("/", get(get_available_rss_feeds))
+        .nest_service(
+            "/feed",
+            tower::ServiceBuilder::new()
+                .layer(middleware::from_fn(set_rss_feed_headers))
+                .service(rss_feeds_service),
+        )
+        .with_state(app_config_state);
+
     let app = Router::new()
         .route(
             "/channel/:telegram_channel_username",
             post(post_add_channel),
         )
-        .with_state(app_actor_sender_state)
-        .nest_service(
-            "/rss",
-            tower::ServiceBuilder::new()
-                .layer(middleware::from_fn(set_rss_feed_headers))
-                .service(rss_feeds_service),
-        );
+        .nest("/rss", rss_api)
+        .with_state(app_actor_sender_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -118,4 +131,20 @@ async fn post_add_channel(
         Ok(_) => "OK".to_string(),
         Err(err) => format!("Failed to add telegram channel with {}", err),
     }
+}
+
+async fn get_available_rss_feeds(State(state): State<AppConfigState>) -> impl IntoResponse {
+    let mut feeds_dir = tokio::fs::read_dir(state.config.base_rss_feed_path)
+        .await
+        .unwrap();
+    let mut feeds = vec![];
+    while let Some(feed) = feeds_dir.next_entry().await.unwrap() {
+        feeds.push(feed.file_name())
+    }
+    Json(
+        feeds
+            .iter()
+            .map(|feed| format!("/feed/{}", feed.to_str().unwrap()))
+            .collect::<Vec<_>>(),
+    )
 }
