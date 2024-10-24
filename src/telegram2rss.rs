@@ -25,6 +25,41 @@ pub async fn update_rss_feeds(
     Ok(())
 }
 
+pub async fn add_rss_feed(
+    client: &Client,
+    base_rss_feed_path: &Path,
+    channel_username: &str,
+) -> anyhow::Result<()> {
+    log::info!("Adding new channel: {}", channel_username);
+    let rss_feed_path = base_rss_feed_path.join(format!("{}.xml", channel_username));
+    match tokio::fs::metadata(rss_feed_path).await {
+        Ok(metadata) => {
+            if metadata.is_file() {
+                log::info!("Feed already exists for {}", channel_username);
+            } else {
+                log::warn!("Not a file for feed {}", channel_username);
+            }
+            return Ok(());
+        }
+        Err(_) => {
+            log::info!("Feed does not exist");
+        }
+    }
+
+    match client.resolve_username(channel_username).await? {
+        Some(chat) => match chat {
+            grammers_client::types::Chat::Channel(channel) => {
+                client.join_chat(channel).await?;
+                log::info!("Successfully joined to {}", channel_username);
+            }
+            _ => log::error!("Not a channel"),
+        },
+        None => log::error!("Chat not found"),
+    }
+
+    Ok(())
+}
+
 async fn process_channel(
     client: &Client,
     repository: &mut impl repository::TelegramChannelRepository,

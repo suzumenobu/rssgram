@@ -5,6 +5,7 @@ use tokio::sync::mpsc;
 #[derive(Debug)]
 pub enum AppActorMessage {
     SyncRssFeeds,
+    AddTelegramChannel { channel_username: String },
 }
 
 pub async fn run(mut actor: AppActor<impl repository::TelegramChannelRepository>) {
@@ -43,6 +44,14 @@ where
                     &self.state.config.base_rss_feed_path,
                 )
                 .await?
+            }
+            AppActorMessage::AddTelegramChannel { channel_username } => {
+                telegram2rss::add_rss_feed(
+                    &self.state.client,
+                    &self.state.config.base_rss_feed_path,
+                    &channel_username,
+                )
+                .await?;
             }
         }
         Ok(())

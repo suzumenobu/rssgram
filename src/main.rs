@@ -9,10 +9,11 @@ mod telegram2rss;
 use actor::AppActor;
 use app_state::AppState;
 use axum::{
-    extract::Request,
+    extract::{Path, Request, State},
     http::{header, HeaderValue},
     middleware::{self, Next},
     response::IntoResponse,
+    routing::post,
     Router,
 };
 use envconfig::Envconfig;
@@ -23,6 +24,11 @@ use tower_http::services::ServeDir;
 use std::time::Duration;
 
 use crate::actor::AppActorMessage;
+
+#[derive(Clone)]
+struct ActorSenderState {
+    tx: mpsc::Sender<AppActorMessage>,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -68,13 +74,21 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(async move { actor::run(app_actor).await });
 
+    let app_actor_sender_state = ActorSenderState { tx: tx.clone() };
+
     let rss_feeds_service = ServeDir::new(&config.base_rss_feed_path);
-    let app = Router::new().nest_service(
-        "/rss",
-        tower::ServiceBuilder::new()
-            .layer(middleware::from_fn(set_rss_feed_headers))
-            .service(rss_feeds_service),
-    );
+    let app = Router::new()
+        .route(
+            "/channel/:telegram_channel_username",
+            post(post_add_channel),
+        )
+        .with_state(app_actor_sender_state)
+        .nest_service(
+            "/rss",
+            tower::ServiceBuilder::new()
+                .layer(middleware::from_fn(set_rss_feed_headers))
+                .service(rss_feeds_service),
+        );
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -89,4 +103,19 @@ async fn set_rss_feed_headers(request: Request, next: Next) -> impl IntoResponse
         HeaderValue::from_static("application/xml"),
     );
     response
+}
+
+async fn post_add_channel(
+    State(state): State<ActorSenderState>,
+    Path(telegram_channel_username): Path<String>,
+) -> impl IntoResponse {
+    let channel_username = telegram_channel_username.replace("@", "");
+    match state
+        .tx
+        .send(AppActorMessage::AddTelegramChannel { channel_username })
+        .await
+    {
+        Ok(_) => "OK".to_string(),
+        Err(err) => format!("Failed to add telegram channel with {}", err),
+    }
 }
