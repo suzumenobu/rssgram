@@ -16,4 +16,5 @@ nanodb = "0.4.5"
 rss = "2.0.9"
 serde = { version = "1.0.213", features = ["derive"] }
 tokio = { version = "1.41.0", features = ["full"] }
+tower = "0.5.1"
 tower-http = { version = "0.6.1", features = ["fs"] }

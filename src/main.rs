@@ -8,7 +8,13 @@ mod telegram2rss;
 
 use actor::AppActor;
 use app_state::AppState;
-use axum::Router;
+use axum::{
+    extract::Request,
+    http::{header, HeaderValue},
+    middleware::{self, Next},
+    response::IntoResponse,
+    Router,
+};
 use envconfig::Envconfig;
 use nanodb::nanodb::NanoDB;
 use tokio::sync::mpsc;
@@ -25,6 +31,10 @@ async fn main() -> anyhow::Result<()> {
     let config = config::Config::init_from_env()?;
 
     std::fs::create_dir_all(&config.base_rss_feed_path)?;
+    log::info!(
+        "Serving RSS feeds from {}",
+        &config.base_rss_feed_path.display()
+    );
 
     let client = telegram::init_client(&config).await?;
 
@@ -59,10 +69,24 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move { actor::run(app_actor).await });
 
     let rss_feeds_service = ServeDir::new(&config.base_rss_feed_path);
-    let app = Router::new().route_service("/xml", rss_feeds_service);
+    let app = Router::new().nest_service(
+        "/rss",
+        tower::ServiceBuilder::new()
+            .layer(middleware::from_fn(set_rss_feed_headers))
+            .service(rss_feeds_service),
+    );
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 
     Ok(())
+}
+
+async fn set_rss_feed_headers(request: Request, next: Next) -> impl IntoResponse {
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/xml"),
+    );
+    response
 }
