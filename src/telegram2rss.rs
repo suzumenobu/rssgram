@@ -12,16 +12,25 @@ pub async fn update_rss_feeds(
 ) -> anyhow::Result<()> {
     log::info!("Starting RSS feeds update");
     let mut dialogs = client.iter_dialogs();
+    let mut processed_dialogs = 0;
+    let mut total_updates_count = 0;
     while let Some(dialog) = dialogs.next().await? {
         let chat = dialog.chat();
 
         match chat {
             grammers_client::types::Chat::Channel(channel) => {
-                process_channel(client, repository, channel, base_rss_feed_path).await?;
+                total_updates_count +=
+                    process_channel(client, repository, channel, base_rss_feed_path).await?;
+                processed_dialogs += 1;
             }
             _ => continue,
         }
     }
+    log::info!(
+        "RSS feeds update finished. Processed {} channels with {} new messages",
+        processed_dialogs,
+        total_updates_count
+    );
     Ok(())
 }
 
@@ -65,8 +74,9 @@ async fn process_channel(
     repository: &mut impl repository::TelegramChannelRepository,
     channel: &grammers_client::types::chat::Channel,
     base_rss_feed_path: &Path,
-) -> anyhow::Result<()> {
-    log::info!("{}", channel.title());
+) -> anyhow::Result<usize> {
+    log::debug!("Starting processing of [{}] ", channel.title());
+    let mut updates_count = 0;
 
     let mut channel_info = repository
         .find_channel_info_by_id(&channel.id())
@@ -97,7 +107,7 @@ async fn process_channel(
         Some(id) => {
             let messages_to_process =
                 std::cmp::min(id - channel_info.last_processed_message_id, 10);
-            log::info!("{} messages will be processed", messages_to_process);
+            log::debug!("{} messages will be processed", messages_to_process);
             messages = messages.limit(messages_to_process as usize);
 
             let mut items = Vec::with_capacity(messages_to_process as usize);
@@ -115,6 +125,7 @@ async fn process_channel(
                 items.push(item);
             }
 
+            updates_count += items.len();
             items.extend_from_slice(rss_channel.items());
             rss_channel.set_items(items);
 
@@ -126,8 +137,8 @@ async fn process_channel(
                 .await?;
         }
         None => {
-            println!("There is no any unprocessed messages");
+            log::debug!("There is no any unprocessed messages");
         }
     }
-    Ok(())
+    Ok(updates_count)
 }
